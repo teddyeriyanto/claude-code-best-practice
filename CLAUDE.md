@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Personal Operating Context
+
+Read this at the start of every session before doing anything else:
+
+@docs/master-context.md
+
 ## Repository Overview
 
 This is a best practices repository for Claude Code configuration, demonstrating patterns for skills, subagents, hooks, and commands. It serves as a reference implementation rather than an application codebase.
