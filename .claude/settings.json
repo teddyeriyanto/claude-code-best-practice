@@ -240,6 +240,18 @@
             "statusMessage": "SessionStart"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/shared/scripts/sync-skill.sh",
+            "timeout": 10000,
+            "async": true,
+            "once": true,
+            "statusMessage": "Syncing Arcads skills"
+          }
+        ]
       }
     ],
     "SessionEnd": [
