@@ -1,1 +1,12 @@
 plan/
+
+# Arcads — synced skill copies (source of truth is skills/)
+.claude/skills/arcads-external-api/
+.claude/skills/generate-youtube-thumbnail/
+.cursor/skills/
+
+# Arcads — local secrets and generated context
+.env
+.env.*
+!.env.example
+MASTER_CONTEXT.md
