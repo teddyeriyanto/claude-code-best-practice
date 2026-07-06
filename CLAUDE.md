@@ -4,45 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a best practices repository for Claude Code configuration, demonstrating patterns for skills, subagents, hooks, and commands. It serves as a reference implementation rather than an application codebase.
+This is a best practices repository for Claude Code configuration, demonstrating patterns for skills, subagents, hooks, and commands. It is a reference implementation and documentation collection, not an application codebase — there is no build system, package manager, or test suite. Content is Markdown docs plus live `.claude/` configuration that actually runs in sessions here.
+
+## Answering Best Practice Questions
+
+When the user asks a Claude Code best practice question, **always search this repo first** (`best-practice/`, `reports/`, `tips/`, `implementation/`, and `README.md`) before relying on training knowledge or external sources. This repo is the authoritative source — only fall back to external docs or web search if the answer is not found here.
+
+## Repository Map
+
+| Directory | Purpose |
+|-----------|---------|
+| `best-practice/` | Canonical reference docs: subagents, commands, skills, settings, memory, MCP, CLI flags, power-ups |
+| `implementation/` | How each feature was implemented in this repo |
+| `reports/` | Deep-dive research reports (agent memory, tool use, rate limits, …) |
+| `tips/` | Dated tip collections from the Claude Code team (Boris, Thariq) |
+| `orchestration-workflow/` | Weather system flow diagram and generated outputs |
+| `development-workflows/` | Cross-model (Claude + Codex) and RPI workflow docs |
+| `agent-teams/` | Agent teams prompt and outputs |
+| `changelog/` | Drift-tracking state used by the `/workflows:*` commands |
+| `tutorial/`, `videos/`, `presentation/` | Learning material |
+| `.claude/` | Live examples: agents, commands, skills, hooks, rules, settings, agent-memory |
 
 ## Key Components
 
 ### Weather System (Example Workflow)
 A demonstration of two distinct skill patterns via the **Command → Agent → Skill** architecture:
 - `/weather-orchestrator` command (`.claude/commands/weather-orchestrator.md`): Entry point — asks user for C/F, invokes agent, then invokes SVG skill
-- `weather-agent` agent (`.claude/agents/weather-agent.md`): Fetches temperature using its preloaded `weather-fetcher` skill (agent skill pattern)
+- `weather-agent` agent (`.claude/agents/weather-agent.md`): Fetches temperature using its preloaded `weather-fetcher` skill (agent skill pattern); persists learnings via the `memory` frontmatter field to `.claude/agent-memory/weather-agent/MEMORY.md`
 - `weather-fetcher` skill (`.claude/skills/weather-fetcher/SKILL.md`): Preloaded into agent — instructions for fetching temperature from Open-Meteo
-- `weather-svg-creator` skill (`.claude/skills/weather-svg-creator/SKILL.md`): Skill — creates SVG weather card, writes `orchestration-workflow/weather.svg` and `orchestration-workflow/output.md`
+- `weather-svg-creator` skill (`.claude/skills/weather-svg-creator/SKILL.md`): Invoked via the `Skill` tool — creates SVG weather card, writes `orchestration-workflow/weather.svg` and `orchestration-workflow/output.md`
 
-Two skill patterns: agent skills (preloaded via `skills:` field) vs skills (invoked via `Skill` tool). See `orchestration-workflow/orchestration-workflow.md` for the complete flow diagram.
+Two skill patterns: agent skills (preloaded via `skills:` field) vs skills (invoked via `Skill` tool). See `orchestration-workflow/orchestration-workflow.md` for the complete flow diagram. The time system (`/time-command` → `time-agent` → `time-skill`) is a minimal second example of the same pattern.
 
-### Skill Definition Structure
-Skills in `.claude/skills/<name>/SKILL.md` use YAML frontmatter:
-- `name`: Display name and `/slash-command` (defaults to directory name)
-- `description`: When to invoke (recommended for auto-discovery)
-- `argument-hint`: Autocomplete hint (e.g., `[issue-number]`)
-- `disable-model-invocation`: Set `true` to prevent automatic invocation
-- `user-invocable`: Set `false` to hide from `/` menu (background knowledge only)
-- `allowed-tools`: Tools allowed without permission prompts when skill is active
-- `model`: Model to use when skill is active
-- `context`: Set to `fork` to run in isolated subagent context
-- `agent`: Subagent type for `context: fork` (default: `general-purpose`)
-- `hooks`: Lifecycle hooks scoped to this skill
+### Maintenance Workflows
+Six `/workflows:*` commands (`.claude/commands/workflows/`) keep the docs in sync with Claude Code releases. Each command is a coordinator that spawns its matching research agents from `.claude/agents/workflows/` **in parallel**, fetches official docs/changelog, compares against the local reports, and presents a unified drift report. These are read-then-report workflows — only take action if the user approves. Drift state lives in `changelog/`.
 
 ### Presentation System
-See `.claude/rules/presentation.md` — all presentation work is delegated to the `presentation-curator` agent.
+See `.claude/rules/presentation.md` — all presentation work is delegated to the `presentation-curator` agent. Its three preloaded skills live in `.claude/skills/presentation/`.
 
 ### Hooks System
 Cross-platform sound notification system in `.claude/hooks/`:
-- `scripts/hooks.py`: Main handler for Claude Code hook events
-- `config/hooks-config.json`: Shared team configuration
-- `config/hooks-config.local.json`: Personal overrides (git-ignored)
+- `scripts/hooks.py`: Single handler for all Claude Code hook events
+- `config/hooks-config.json`: Shared team configuration; `config/hooks-config.local.json`: personal overrides (git-ignored)
 - `sounds/`: Audio files organized by hook event (generated via ElevenLabs TTS)
 
-Hook events configured in `.claude/settings.json`: PreToolUse, PostToolUse, UserPromptSubmit, Notification, Stop, SubagentStart, SubagentStop, PreCompact, SessionStart, SessionEnd, Setup, PermissionRequest, TeammateIdle, TaskCompleted, ConfigChange.
-
-Special handling: git commits trigger `pretooluse-git-committing` sound.
+The authoritative list of wired hook events is the `hooks` key in `.claude/settings.json` (27 events as of v2.1.101) — check it there rather than relying on any enumerated list. Special handling: git commits trigger the `pretooluse-git-committing` sound.
 
 ## Critical Patterns
 
@@ -54,23 +60,13 @@ Agent(subagent_type="agent-name", description="...", prompt="...", model="haiku"
 
 Be explicit about tool usage in subagent definitions. Avoid vague terms like "launch" that could be misinterpreted as bash commands.
 
-### Subagent Definition Structure
-Subagents in `.claude/agents/*.md` use YAML frontmatter:
-- `name`: Subagent identifier
-- `description`: When to invoke (use "PROACTIVELY" for auto-invocation)
-- `tools`: Comma-separated allowlist of tools (inherits all if omitted). Supports `Agent(agent_type)` syntax
-- `disallowedTools`: Tools to deny, removed from inherited or specified list
-- `model`: Model alias: `haiku`, `sonnet`, `opus`, or `inherit` (default: `inherit`)
-- `permissionMode`: Permission mode (e.g., `"acceptEdits"`, `"plan"`, `"bypassPermissions"`)
-- `maxTurns`: Maximum agentic turns before the subagent stops
-- `skills`: List of skill names to preload into agent context
-- `mcpServers`: MCP servers for this subagent (server names or inline configs)
-- `hooks`: Lifecycle hooks scoped to this subagent (all hook events are supported; `PreToolUse`, `PostToolUse`, and `Stop` are the most common)
-- `memory`: Persistent memory scope — `user`, `project`, or `local` (see `reports/claude-agent-memory.md`)
-- `background`: Set to `true` to always run as a background task
-- `effort`: Effort level override: `low`, `medium`, `high`, `max` (default: inherits from session)
-- `isolation`: Set to `"worktree"` to run in a temporary git worktree
-- `color`: CLI output color for visual distinction
+### Frontmatter Reference (Skills, Agents, Commands)
+Do not rely on memorized field lists — frontmatter options change between Claude Code versions. The canonical, actively-maintained references are in this repo:
+- Skills: `best-practice/claude-skills.md` (`context: fork`, `agent`, `allowed-tools`, preloading, hooks, …)
+- Subagents: `best-practice/claude-subagents.md` (`tools`, `model`, `memory`, `permissionMode`, `effort`, `isolation`, …)
+- Commands: `best-practice/claude-commands.md`
+
+These docs are kept current by the `/workflows:*` commands; consult them before writing or editing any `.claude/` definition.
 
 ### Configuration Hierarchy
 1. **Managed** (`managed-settings.json` / MDM plist / Registry): Organization-enforced, cannot be overridden
@@ -80,18 +76,13 @@ Subagents in `.claude/agents/*.md` use YAML frontmatter:
 5. `~/.claude/settings.json`: Global personal defaults
 6. `hooks-config.local.json` overrides `hooks-config.json`
 
-### Disable Hooks
-Set `"disableAllHooks": true` in `.claude/settings.local.json`, or disable individual hooks in `hooks-config.json`.
-
-## Answering Best Practice Questions
-
-When the user asks a Claude Code best practice question, **always search this repo first** (`best-practice/`, `reports/`, `tips/`, `implementation/`, and `README.md`) before relying on training knowledge or external sources. This repo is the authoritative source — only fall back to external docs or web search if the answer is not found here.
+To disable hooks: set `"disableAllHooks": true` in `.claude/settings.local.json`, or disable individual hooks in `hooks-config.json`.
 
 ## Workflow Best Practices
 
 From experience with this repository:
 
-- Keep CLAUDE.md under 200 lines per file for reliable adherence
+- Keep CLAUDE.md under 200 lines per file for reliable adherence — prefer pointers to docs over duplicated content, and repo-specific rules over generic advice
 - Use commands for workflows instead of standalone agents
 - Create feature-specific subagents with skills (progressive disclosure) rather than general-purpose agents
 - Perform manual `/compact` at ~50% context usage
@@ -119,7 +110,7 @@ This makes the git history cleaner and easier to review, revert, or cherry-pick 
 
 ## Documentation
 
-See `.claude/rules/markdown-docs.md` for documentation standards. Key docs:
+See `.claude/rules/markdown-docs.md` for documentation standards (structure, linking, README table updates). Key docs:
 - `best-practice/claude-subagents.md`: Subagent frontmatter, hooks, and repository agents
 - `best-practice/claude-commands.md`: Slash command patterns and built-in command reference
 - `orchestration-workflow/orchestration-workflow.md`: Weather system flow diagram
